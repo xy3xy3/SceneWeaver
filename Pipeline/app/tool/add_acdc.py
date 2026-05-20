@@ -1,8 +1,12 @@
 import json
 import os
+import subprocess
+from pathlib import Path
 
 from gpt import GPT4
 
+from app.logger import logger
+from app.tool.add_gpt import AddGPTExecute
 from app.prompt.acdc_cand import system_prompt, user_prompt
 from app.tool.base import BaseTool
 from app.tool.update_infinigen import update_infinigen
@@ -24,6 +28,10 @@ Strengths: Real. Excellent for adding a group of objects with inter-relations on
 Weaknesses: Very slow. Can not add objects on the wall, ground, or ceiling. Can not add objectsinside a container, such as objects in the shelf. Can not add objects when there is already something on the top.
 
 """
+
+
+def _expanded(path: str) -> Path:
+    return Path(path).expanduser()
 
 
 class AddAcdcExecute(BaseTool):
@@ -48,6 +56,18 @@ class AddAcdcExecute(BaseTool):
         iter = int(os.getenv("iter"))
         roomtype = os.getenv("roomtype")
         action = self.name
+
+        external_dirs = (
+            _expanded("~/workspace/digital-cousins"),
+            _expanded("~/workspace/Tabletop-Digital-Cousins"),
+            _expanded("~/workspace/sd3.5"),
+        )
+        if not all(path.exists() for path in external_dirs):
+            logger.warning(
+                "ACDC workspace is missing locally, falling back to add_gpt."
+            )
+            return AddGPTExecute().execute(ideas=ideas)
+
         try:
             # 1 generate prompt for sd
             steps = gen_ACDC_cand(user_demand, ideas, roomtype, iter)
@@ -72,19 +92,18 @@ class AddAcdcExecute(BaseTool):
                         # 3 use acdc to reconstruct 3D scene
                         _ = acdc(img_filename, obj_id, info["obj category"])
 
-                        with open(
-                            "~/workspace/digital-cousins/args.json", "r"
-                        ) as f:
+                        args_path = _expanded("~/workspace/Tabletop-Digital-Cousins/args.json")
+                        with open(args_path, "r") as f:
                             j = json.load(f)
-                            if j["success"]:
-                                save_dir = os.getenv("save_dir")
-                                newid = obj_id.replace(" ", "_")
-                                foldername_old = f"{save_dir}/pipeline/acdc_output/step_3_output/scene_0/"
-                                foldername_new = f"{save_dir}/pipeline/{newid}"
-                                os.system(f"cp -r {foldername_old} {foldername_new}")
-                                json_name = f"{foldername_new}/scene_0_info.json"
-                                acdc_record[sd_prompt] = json_name
-                                break
+                        if j["success"]:
+                            save_dir = os.getenv("save_dir")
+                            newid = obj_id.replace(" ", "_")
+                            foldername_old = f"{save_dir}/pipeline/acdc_output/step_3_output/scene_0/"
+                            foldername_new = f"{save_dir}/pipeline/{newid}"
+                            os.system(f"cp -r {foldername_old} {foldername_new}")
+                            json_name = f"{foldername_new}/scene_0_info.json"
+                            acdc_record[sd_prompt] = json_name
+                            break
                     assert j["success"]
                 else:
                     json_name = acdc_record[sd_prompt]
@@ -100,8 +119,9 @@ class AddAcdcExecute(BaseTool):
                 inplace = True
 
             return "Successfully add objects with ACDC."
-        except Exception:
-            return "Error adding objects with ACDC"
+        except Exception as exc:
+            logger.warning("ACDC path failed, falling back to add_gpt: {}", exc)
+            return AddGPTExecute().execute(ideas=ideas)
 
 
 def acdc(img_filename, obj_id, category):
@@ -114,10 +134,10 @@ def acdc(img_filename, obj_id, category):
         "success": False,
         "error": "Unknown",
     }
-    with open("~/workspace/Tabletop-Digital-Cousins/args.json", "w") as f:
+    args_path = _expanded("~/workspace/Tabletop-Digital-Cousins/args.json")
+    args_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(args_path, "w") as f:
         json.dump(j, f, indent=4)
-
-    import subprocess
 
     cmd = """
     source /home/yandan/anaconda3/etc/profile.d/conda.sh
@@ -126,12 +146,20 @@ def acdc(img_filename, obj_id, category):
     conda activate acdc2
     python digital_cousins/pipeline/acdc_pipeline.py --gpt_api_key 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 > ~/workspace/SceneWeaver/Pipeline/run.log 2>&1
     """
-    subprocess.run(["bash", "-c", cmd])
+    subprocess.run(["bash", "-c", cmd], check=True)
     # os.system("bash -i ~/workspace/digital-cousins/run.sh")
     save_dir = os.getenv("save_dir")
     json_name = (
         f"{save_dir}/pipeline/acdc_output/step_3_output/scene_0/scene_0_info.json"
     )
+
+    success_path = _expanded("~/workspace/Tabletop-Digital-Cousins/args.json")
+    if not success_path.exists():
+        raise FileNotFoundError("ACDC did not produce args.json")
+    with open(success_path, "r") as f:
+        result = json.load(f)
+    if not result.get("success"):
+        raise RuntimeError(result.get("error", "Unknown ACDC failure"))
 
     return json_name
 
@@ -143,11 +171,13 @@ def gen_img_SD(SD_prompt, obj_id, obj_size):
     save_dir = os.getenv("save_dir")
     img_filename = f"{save_dir}/pipeline/SD_img.jpg"
     j = {"prompt": SD_prompt, "img_savedir": img_filename}
-    with open("~/workspace/sd3.5/prompt.json", "w") as f:
+    prompt_path = _expanded("~/workspace/sd3.5/prompt.json")
+    prompt_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(prompt_path, "w") as f:
         json.dump(j, f, indent=4)
 
-    basedir = "~/workspace/sd3.5"
-    os.system(f"bash {basedir}/run.sh")
+    basedir = _expanded("~/workspace/sd3.5")
+    subprocess.run(["bash", str(basedir / "run.sh")], check=True)
 
     return img_filename
 

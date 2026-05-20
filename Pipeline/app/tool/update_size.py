@@ -45,11 +45,11 @@ class UpdateSizeExecute(BaseTool):
             # find scene
             json_name = self.update_scene_gpt(user_demand, ideas, iter, roomtype)
             # json_name = update_ds(user_demand,ideas,iter,roomtype)
-            success = update_infinigen(action, iter, json_name, ideas=ideas)
+            success = update_infinigen("update", iter, json_name, ideas=ideas)
             assert success
             return "Successfully Modify sizes with GPT."
-        except Exception:
-            return "Error Modify layout with GPT"
+        except Exception as e:
+            return f"Error Modify layout with GPT: {e}"
 
     def update_scene_gpt(self, user_demand, ideas, iter, roomtype):
         save_dir = os.getenv("save_dir")

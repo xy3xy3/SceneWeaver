@@ -495,12 +495,22 @@ class SceneDesigner:
 
         self.current_step = 0
         save_dir = os.getenv("save_dir")
+        def step_snapshot_complete(step_idx: int) -> bool:
+            required_paths = [
+                f"{save_dir}/pipeline/memory_{step_idx}.pkl",
+                f"{save_dir}/pipeline/metric_{step_idx}.json",
+                f"{save_dir}/record_scene/render_{step_idx}.jpg",
+            ]
+            return all(os.path.exists(path) for path in required_paths)
+
         memory_path = f"{save_dir}/pipeline/memory_{self.current_step}.pkl"
         roominfo_path = f"{save_dir}/roominfo.json"
         while os.path.exists(memory_path):
-            if not os.path.exists(roominfo_path):
+            if not os.path.exists(roominfo_path) or not step_snapshot_complete(
+                self.current_step
+            ):
                 logger.warning(
-                    f"Found stale memory state at {memory_path} without roominfo.json; starting from step 0."
+                    f"Found stale memory state at step {self.current_step}; starting from step 0."
                 )
                 self.current_step = 0
                 break

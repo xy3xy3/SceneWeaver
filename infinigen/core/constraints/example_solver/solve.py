@@ -458,6 +458,8 @@ class Solver:
                 json.dump(self.LoadObjavFiles, f, indent=4)
             return
 
+        default_objav_files = {name: [None] for name in self.LoadObjavCnts.keys()}
+
         # cmd = """
         # source /home/yandan/anaconda3/etc/profile.d/conda.sh
         # conda activate idesign
@@ -468,15 +470,30 @@ class Solver:
         repo_root = Path(__file__).resolve().parents[4]
         retrieve_log = Path(save_dir) / "retrieve.log"
         with open(retrieve_log, "w") as log_file:
-            subprocess.run(
-                ["bash", "./run/retrieve.sh", save_dir],
-                cwd=repo_root,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                check=True,
-            )
-        with open(f"{save_dir}/objav_files.json", "r") as f:
-            self.LoadObjavFiles = json.load(f)
+            try:
+                subprocess.run(
+                    ["bash", "./run/retrieve.sh", save_dir],
+                    cwd=repo_root,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    check=True,
+                )
+            except subprocess.CalledProcessError:
+                logger.warning(
+                    "Objaverse retrieval failed. Falling back to proxy assets for %s",
+                    list(default_objav_files.keys()),
+                )
+                self.LoadObjavFiles = default_objav_files
+                with open(f"{save_dir}/objav_files.json", "w") as f:
+                    json.dump(self.LoadObjavFiles, f, indent=4)
+                return
+        if os.path.exists(f"{save_dir}/objav_files.json"):
+            with open(f"{save_dir}/objav_files.json", "r") as f:
+                self.LoadObjavFiles = json.load(f)
+        else:
+            self.LoadObjavFiles = default_objav_files
+        for name, value in default_objav_files.items():
+            self.LoadObjavFiles.setdefault(name, value)
         return
 
     @gin.configurable
@@ -630,7 +647,7 @@ class Solver:
                         gen_class._category = category
 
                         class_name = category
-                        asset_file = self.LoadObjavFiles[category][0]
+                        asset_file = self.LoadObjavFiles.get(category, [None])[0]
                     else:
                         module_name, class_name = module_and_class.rsplit(".", 1)
                         module = importlib.import_module(
@@ -1928,7 +1945,7 @@ class Solver:
                 -(math.radians(value["rotation"]["z_angle"]) + math.pi) - math.pi / 2
             )
             # asset_file = f"{asset_dir}/{key}.glb"
-            asset_file = self.LoadObjavFiles[category][0]
+            asset_file = self.LoadObjavFiles.get(category, [None])[0]
 
             gen_class = GeneralObjavFactory
             gen_class._x_dim = x_dim
@@ -2043,7 +2060,7 @@ class Solver:
             # position[2] = position[2] - z_dim / 2 + 0.14
             position[2] = position[2] + 0.14
             rotation = math.radians(value["rotation"]["z_angle"])  # + math.pi
-            asset_file = self.LoadObjavFiles[category][0]
+            asset_file = self.LoadObjavFiles.get(category, [None])[0]
 
             gen_class = GeneralObjavFactory
             gen_class._x_dim = x_dim
@@ -2241,7 +2258,7 @@ class Solver:
             position = [position["x"] + 0.14, position["y"] + 0.14, position["z"]]
             position[2] = position[2] - z_dim / 2 + 0.14
             rotation = math.radians(value["rotation"]["z_angle"])  # + math.pi
-            asset_file = self.LoadObjavFiles[category][0]
+            asset_file = self.LoadObjavFiles.get(category, [None])[0]
 
             gen_class = GeneralObjavFactory
             gen_class._x_dim = x_dim
@@ -2358,7 +2375,7 @@ class Solver:
             position = [position["x"] + 0.14, position["z"] + 0.14, position["y"]]
             position[2] = position[2] - z_dim / 2 + 0.14
             rotation = math.radians(90 - value["rotation"]["z_angle"])  # + math.pi
-            asset_file = self.LoadObjavFiles[category][0]
+            asset_file = self.LoadObjavFiles.get(category, [None])[0]
 
             gen_class = GeneralObjavFactory
             gen_class._x_dim = x_dim

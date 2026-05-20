@@ -7,6 +7,7 @@ from gpt import GPT4
 from app.tool.add_relation import add_relation
 from app.tool.base import BaseTool
 from app.tool.metascene_frontview import get_scene_frontview
+from app.tool.init_physcene import normalize_roomtype, resolve_physcene_scene
 from app.tool.update_infinigen import update_infinigen
 from app.utils import dict2str
 
@@ -63,9 +64,19 @@ class InitMetaSceneExecute(BaseTool):
         try:
             # # find scene
             save_dir = os.getenv("save_dir")
-            json_name, roomsize = self.find_metascene(user_demand, ideas, roomtype)
-            roomsize = self.get_roomsize(user_demand, ideas, roomsize, roomtype)
-            success = get_scene_frontview(json_name)
+            fallback_used = False
+            try:
+                json_name, roomsize = self.find_metascene(
+                    user_demand, ideas, roomtype
+                )
+                roomsize = self.get_roomsize(
+                    user_demand, ideas, roomsize, roomtype
+                )
+                success = get_scene_frontview(json_name)
+            except Exception:
+                json_name, roomsize = resolve_physcene_scene(roomtype)
+                fallback_used = True
+                success = True
             with open(f"{save_dir}/roominfo.json", "w") as f:
                 info = {
                     "action": action,
@@ -79,7 +90,10 @@ class InitMetaSceneExecute(BaseTool):
             os.system(
                 f"cp {save_dir}/roominfo.json ../run/roominfo.json"
             )
-            success = update_infinigen(action, iter, json_name, ideas=ideas)
+            action_for_backend = "init_physcene" if fallback_used else action
+            success = update_infinigen(
+                action_for_backend, iter, json_name, ideas=ideas
+            )
             assert success
 
             # add relation
@@ -90,9 +104,11 @@ class InitMetaSceneExecute(BaseTool):
             )
             assert success
 
+            if fallback_used:
+                return "Successfully initialize scene using fallback PhyScene data."
             return "Successfully initialize scene by loading MetaScene."
-        except Exception:
-            return "Error initializing scene by loading MetaScene."
+        except Exception as e:
+            return f"Error initializing scene by loading MetaScene: {e}"
 
     def find_metascene(self, user_demand, ideas, roomtype):
         def statistic_obj_nums(scene_id):
@@ -136,8 +152,7 @@ class InitMetaSceneExecute(BaseTool):
 
             return scene_id
 
-        if roomtype.endswith("room"):
-            roomtype = roomtype[:-4].strip()
+        roomtype = normalize_roomtype(roomtype)
         basedir = "/mnt/fillipo/yandan/metascene/export_stage2_sm"
 
         with open(f"{basedir}/statistic.json", "r") as f:

@@ -2,6 +2,7 @@ import json
 import os
 import socket
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -33,6 +34,84 @@ def send_command(host="localhost", port=12345, command=None):
             client_socket.close()
 
 
+def get_blender_binary():
+    env_candidates = (
+        "SCENEWEAVER_BLENDER",
+        "BLENDER_BIN",
+        "BLENDER_PATH",
+        "INFINIGEN_BLENDER",
+    )
+    candidates = []
+    for env_name in env_candidates:
+        env_value = os.getenv(env_name)
+        if env_value:
+            candidates.append(Path(env_value).expanduser())
+
+    sceneweaver_root = Path(
+        os.getenv("sceneweaver_dir", Path(__file__).resolve().parents[3])
+    )
+    candidates.extend(
+        [
+            sceneweaver_root / ".local/blender-3.6/blender",
+            sceneweaver_root / "blender/blender",
+            sceneweaver_root / "Blender.app/Contents/MacOS/Blender",
+        ]
+    )
+
+    seen = set()
+    for candidate in candidates:
+        candidate = candidate.expanduser().resolve()
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return str(candidate)
+
+    raise FileNotFoundError(
+        "Could not locate blender binary. Set SCENEWEAVER_BLENDER, BLENDER_BIN, or BLENDER_PATH explicitly."
+    )
+
+
+def get_blender_python(blender_binary: str) -> str:
+    blender_path = Path(blender_binary).resolve()
+    blender_root = blender_path.parent
+    candidates = [
+        blender_root / "3.6/python/bin/python3.10",
+        blender_root / "python/bin/python3.10",
+        blender_root / "python/bin/python3",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    raise FileNotFoundError(
+        f"Could not locate Blender python interpreter near {blender_binary}."
+    )
+
+
+def ensure_blender_package(blender_python: str, package_name: str) -> None:
+    probe = subprocess.run(
+        [blender_python, "-c", f"import {package_name}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if probe.returncode == 0:
+        return
+
+    subprocess.run(
+        [
+            blender_python,
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-input",
+            package_name,
+        ],
+        check=True,
+    )
+
+
 def update_infinigen(
     action,
     iter,
@@ -60,45 +139,27 @@ def update_infinigen(
         f"cp {save_dir}/roominfo.json ../run/roominfo.json"
     )
 
-    def get_infinigen_python():
-        env_python = os.getenv("INFINIGEN_PYTHON")
-        if env_python and Path(env_python).expanduser().exists():
-            return str(Path(env_python).expanduser())
-
-        roots = []
-        conda_exe = os.getenv("CONDA_EXE")
-        if conda_exe:
-            conda_path = Path(conda_exe).expanduser().resolve()
-            roots.extend([conda_path.parent.parent, conda_path.parent])
-
-        for dirname in ("miniforge3", "mambaforge", "miniconda3", "anaconda3"):
-            roots.append(Path.home() / dirname)
-
-        # Support both the documented env name and the actual local setup.
-        candidate_env_names = ("infinigen_python", "infinigen")
-        seen = set()
-        for root in roots:
-            root = Path(root)
-            if root in seen:
-                continue
-            seen.add(root)
-            for env_name in candidate_env_names:
-                candidate = root / f"envs/{env_name}/bin/python"
-                if candidate.exists():
-                    return str(candidate)
-
-        raise FileNotFoundError(
-            "Could not locate infinigen python. Set INFINIGEN_PYTHON explicitly."
-        )
-
     # # if invisible:
     sw_dir = os.getenv("sceneweaver_dir")
     socket = os.getenv("socket")
     if action == "export_supporter" or socket=="False":
+        sceneweaver_root = Path(
+            os.getenv("sceneweaver_dir", Path(__file__).resolve().parents[3])
+        ).resolve()
+        blender_binary = get_blender_binary()
+        blender_python = get_blender_python(blender_binary)
+        ensure_blender_package(blender_python, "dill")
+        blendscript_path_append = sceneweaver_root / "infinigen/tools/blendscript_path_append.py"
+        generate_indoors_script = sceneweaver_root / "infinigen_examples/generate_indoors.py"
         cmd = [
-            get_infinigen_python(),
-            "-m",
-            "infinigen_examples.generate_indoors",
+            blender_binary,
+            "--background",
+            "-noaudio",
+            "--python",
+            str(blendscript_path_append),
+            "--python",
+            str(generate_indoors_script),
+            "--",
             "--seed",
             "0",
             "--save_dir",
@@ -116,12 +177,18 @@ def update_infinigen(
             "compose_indoors.invisible_room_ceilings_enabled=True",
         ]
         log_path = Path(sw_dir) / "run.log"
+        env = os.environ.copy()
+        pythonpath_parts = [str(sceneweaver_root)]
+        if env.get("PYTHONPATH"):
+            pythonpath_parts.append(env["PYTHONPATH"])
+        env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
         with open(log_path, "w") as log_file:
             subprocess.run(
                 cmd,
-                cwd=sw_dir,
+                cwd=str(sceneweaver_root),
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
+                env=env,
                 check=True,
             )
         # else:

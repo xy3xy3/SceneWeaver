@@ -7,6 +7,7 @@
 import json
 import math
 import os
+from pathlib import Path
 
 import bpy
 
@@ -45,13 +46,27 @@ class ObjaverseCategoryFactory(ObjaverseFactory):
         self.y_dim = self._y_dim
         self.z_dim = self._z_dim
 
+    def _create_proxy_asset(self) -> bpy.types.Object:
+        print(f"[Objaverse] Missing asset '{self.asset_file}', using proxy cube.")
+        bpy.ops.mesh.primitive_cube_add(location=(0, 0, 0))
+        imported_obj = bpy.context.selected_objects[0]
+        imported_obj.dimensions = (
+            self.x_dim or 0.25,
+            self.y_dim or 0.25,
+            max(self.z_dim or 0.25, 0.05),
+        )
+        return imported_obj
+
     def create_asset(self, **params) -> bpy.types.Object:
+        imported_obj = None
+        filename = self.asset_file
         if (self.asset_file is not None) and (
             not self.asset_file.endswith(".glb")
         ):  # from holodeck
             basedir = OBJATHOR_ASSETS_DIR
             filename = f"{basedir}/{self.asset_file}/{self.asset_file}.pkl.gz"
-            imported_obj = load_pickled_3d_asset(filename)
+            if Path(filename).exists():
+                imported_obj = load_pickled_3d_asset(filename)
         else:  # from openshape
             if self.asset_file is not None:
                 filename = self.asset_file
@@ -60,49 +75,55 @@ class ObjaverseCategoryFactory(ObjaverseFactory):
                 save_dir = os.getenv("save_dir")
                 with open(f"{save_dir}/objav_files.json", "r") as f:
                     LoadObjavFiles = json.load(f)
-                filename = LoadObjavFiles[self.category][0]
-                with open(filename.replace(".glb", "") + "/metadata.json", "r") as f:
-                    value = json.load(f)["front_view"]
-                    front_view_angle = value.split("/")[-1].split(".")[0].split("_")[-1]
-                    angle_bias = value.split("/")[-1].split(".")[0].split("_")[1]
-                    front_view_angle = int(front_view_angle) + int(angle_bias)
-            bpy.ops.import_scene.gltf(filepath=filename)
+                filename = LoadObjavFiles.get(self.category, [None])[0]
+                front_view_angle = 0
+                if filename is not None and Path(filename).exists():
+                    with open(filename.replace(".glb", "") + "/metadata.json", "r") as f:
+                        value = json.load(f)["front_view"]
+                        front_view_angle = value.split("/")[-1].split(".")[0].split("_")[-1]
+                        angle_bias = value.split("/")[-1].split(".")[0].split("_")[1]
+                        front_view_angle = int(front_view_angle) + int(angle_bias)
+            if filename is not None and Path(filename).exists():
+                bpy.ops.import_scene.gltf(filepath=filename)
 
-            # preprocess directary
-            parent_obj = bpy.context.selected_objects[0]
-            # parents = get_highest_parent_objects()
+                # preprocess directary
+                parent_obj = bpy.context.selected_objects[0]
+                # parents = get_highest_parent_objects()
 
-            bpy.ops.object.select_all(action="DESELECT")
-            select_meshes_under_empty(parent_obj.name)
-
-            bpy.ops.object.join()
-            bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
-
-            joined_object = bpy.context.view_layer.objects.active
-            if joined_object is not None:
-                joined_object.name = parent_obj.name + "-joined"
-                joined_object.location = (0, 0, 0)
-                bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
-                bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM")
-                joined_object.location = (0, 0, 0)
-                bpy.context.view_layer.objects.active = joined_object
                 bpy.ops.object.select_all(action="DESELECT")
-                joined_object.select_set(True)
-                bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-                joined_object.rotation_mode = "XYZ"
-                radians = math.radians(front_view_angle + 90)
-                joined_object.rotation_euler[2] = (
-                    radians  # Rotate around Z-a to face front
-                )
-                bpy.ops.object.transform_apply(
-                    location=False, rotation=True, scale=False
-                )
+                select_meshes_under_empty(parent_obj.name)
+
+                bpy.ops.object.join()
                 bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
 
-            bpy.ops.object.select_all(action="DESELECT")
-            delete_object_with_children(parent_obj)
+                joined_object = bpy.context.view_layer.objects.active
+                if joined_object is not None:
+                    joined_object.name = parent_obj.name + "-joined"
+                    joined_object.location = (0, 0, 0)
+                    bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
+                    bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM")
+                    joined_object.location = (0, 0, 0)
+                    bpy.context.view_layer.objects.active = joined_object
+                    bpy.ops.object.select_all(action="DESELECT")
+                    joined_object.select_set(True)
+                    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+                    joined_object.rotation_mode = "XYZ"
+                    radians = math.radians(front_view_angle + 90)
+                    joined_object.rotation_euler[2] = (
+                        radians  # Rotate around Z-a to face front
+                    )
+                    bpy.ops.object.transform_apply(
+                        location=False, rotation=True, scale=False
+                    )
+                    bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
 
-            imported_obj = joined_object
+                bpy.ops.object.select_all(action="DESELECT")
+                delete_object_with_children(parent_obj)
+
+                imported_obj = joined_object
+
+        if imported_obj is None:
+            imported_obj = self._create_proxy_asset()
 
         imported_obj.location = [0, 0, 0]
         # imported_obj.rotation_euler = [0,0,0]

@@ -6,6 +6,7 @@
 
 
 import math
+from pathlib import Path
 
 import bpy
 
@@ -33,11 +34,24 @@ class ThreedFrontCategoryFactory(ThreedFrontFactory):
         self.location_orig = self._position
 
     def create_asset(self, **params) -> bpy.types.Object:
+        asset_path = Path(self.asset_file).expanduser() if self.asset_file else None
+        if asset_path is None or not asset_path.exists():
+            print(f"[ThreedFront] Missing asset '{self.asset_file}', using proxy cube.")
+            bpy.ops.mesh.primitive_cube_add(location=(0, 0, 0))
+            imported_obj = bpy.context.selected_objects[0]
+            imported_obj.scale = self.scale if self.scale is not None else (1, 1, 1)
+            bpy.context.view_layer.objects.active = imported_obj
+            imported_obj.select_set(True)
+            bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+            if self.tag_support:
+                tag_support_surfaces(imported_obj)
+            return imported_obj
+
         # Step 1: Keep track of existing objects
         before = set(bpy.context.scene.objects)
 
         # Step 2: Import the OBJ file
-        bpy.ops.import_scene.obj(filepath=self.asset_file)
+        bpy.ops.import_scene.obj(filepath=str(asset_path))
 
         # Step 3: Identify new objects added by the import
         after = set(bpy.context.scene.objects)

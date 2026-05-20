@@ -6,6 +6,7 @@
 
 
 import math
+from pathlib import Path
 
 import bpy
 from mathutils import Vector
@@ -51,9 +52,16 @@ class MetaCategoryFactory(MetaSceneFactory):
         self.front_view_angle = self._front_view_angle
 
     def create_asset(self, **params) -> bpy.types.Object:
-        print(self.asset_file)
-        bpy.ops.import_scene.gltf(filepath=self.asset_file)
-        imported_obj = bpy.context.selected_objects[0]
+        asset_path = Path(self.asset_file).expanduser() if self.asset_file else None
+        if asset_path is None or not asset_path.exists():
+            print(f"[MetaScene] Missing asset '{self.asset_file}', using proxy cube.")
+            bpy.ops.mesh.primitive_cube_add(location=(0, 0, 0))
+            imported_obj = bpy.context.selected_objects[0]
+            imported_obj.scale = (1, 1, 1)
+        else:
+            print(asset_path)
+            bpy.ops.import_scene.gltf(filepath=str(asset_path))
+            imported_obj = bpy.context.selected_objects[0]
 
         # scale
         self.scale = list(imported_obj.scale)

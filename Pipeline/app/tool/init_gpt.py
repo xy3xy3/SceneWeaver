@@ -27,10 +27,17 @@ def filter_supported_scene_objects(
     against_wall=None,
     relations=None,
 ):
-    filtered_category_dict = dict(category_dict)
-    filtered_name_mapping = dict(name_mapping)
-    for category in filtered_category_dict:
-        filtered_name_mapping.setdefault(category, None)
+    unsupported_categories = {"NatureShelfTrinkets", "nature_shelf_trinkets"}
+    filtered_name_mapping = {
+        category: factory
+        for category, factory in dict(name_mapping).items()
+        if factory and category not in unsupported_categories
+    }
+    filtered_category_dict = {
+        category: count
+        for category, count in dict(category_dict).items()
+        if filtered_name_mapping.get(category)
+    }
 
     filtered_placement = None
     if placement is not None:
