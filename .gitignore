@@ -80,6 +80,7 @@ dist
 build
 blends
 *.ipynb_checkpoints
+condaenv.*.requirements.txt
 
 process_mesh
 worldgen
