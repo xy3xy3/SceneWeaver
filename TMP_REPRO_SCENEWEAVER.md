@@ -104,6 +104,13 @@ CFLAGS="-I/usr/include/python3.10 -I/usr/include/ -I/usr/include/x86_64-linux-gn
 /home/xy3/ht/SceneWeaver/.local/blender-3.6/3.6/python/bin/python3.10 -m pip install -e .
 ```
 
+如果这里报 `Python.h: No such file or directory`，先装系统的 Python 开发头文件再重试：
+
+```bash
+sudo apt update
+sudo apt install -y build-essential python3.10-dev
+```
+
 如果上面失败，也可以直接使用项目自带脚本，但它默认会在当前目录生成 `blender/` 文件夹：
 
 ```bash
