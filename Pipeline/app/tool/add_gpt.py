@@ -5,7 +5,7 @@ from gpt import GPT4
 
 import app.prompt.gpt.add_gpt as prompts1
 import app.prompt.gpt.init_gpt as prompts0
-from app.tool.init_gpt import InitGPTExecute
+from app.tool.init_gpt import InitGPTExecute, filter_supported_scene_objects
 from app.tool.update_infinigen import update_infinigen
 from app.utils import extract_json, lst2str
 
@@ -57,8 +57,8 @@ class AddGPTExecute(InitGPTExecute):
             assert success
 
             return "Successfully add objects with GPT."
-        except Exception:
-            return "Error adding objects with GPT"
+        except Exception as e:
+            return f"Error adding objects with GPT: {e}"
 
     def add_gpt(self, user_demand, ideas, iter, roomtype):
         json_name = self.generate_scene_iter1_gpt(user_demand, ideas, iter, roomtype)
@@ -114,6 +114,19 @@ class AddGPTExecute(InitGPTExecute):
             gpt_text_response.replace("'", '"').replace("None", "null")
         )
         name_mapping = gpt_dict_response["Mapping results"]
+        (
+            filtered_category_list,
+            name_mapping,
+            filtered_placement,
+            _,
+            _,
+        ) = filter_supported_scene_objects(
+            category_list,
+            name_mapping,
+            placement=results["Placement"],
+        )
+        results["Number of new furniture"] = filtered_category_list
+        results["Placement"] = filtered_placement
         results["name_mapping"] = name_mapping
 
         save_dir = os.getenv("save_dir")

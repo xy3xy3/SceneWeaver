@@ -8,14 +8,13 @@ def main(prompt, i, basedir):
     agent = SceneDesigner()
     try:
         # prompt = "Design me a bedroom."
-        save_dir = basedir + prompt[
+        save_name = prompt[
             :30
         ].replace(" ", "_").replace(".", "").replace(",", "_").replace("[", "").replace(
             "]", ""
         )
-        save_dir = save_dir + "_" + str(i)
-        if not os.path.exists(save_dir):
-            os.system(f"mkdir {save_dir}")
+        save_dir = os.path.join(basedir, f"{save_name}_{i}")
+        os.makedirs(save_dir, exist_ok=True)
             
 
         os.makedirs(f"{save_dir}/pipeline", exist_ok=True)

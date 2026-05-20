@@ -11,6 +11,7 @@ import logging
 import math
 import os
 import re
+import subprocess
 from pathlib import Path
 
 import bpy
@@ -451,6 +452,12 @@ class Solver:
         with open(f"{save_dir}/objav_cnts.json", "w") as f:
             json.dump(self.LoadObjavCnts, f, indent=4)
 
+        if len(self.LoadObjavCnts) == 0:
+            self.LoadObjavFiles = {}
+            with open(f"{save_dir}/objav_files.json", "w") as f:
+                json.dump(self.LoadObjavFiles, f, indent=4)
+            return
+
         # cmd = """
         # source /home/yandan/anaconda3/etc/profile.d/conda.sh
         # conda activate idesign
@@ -458,9 +465,16 @@ class Solver:
         # """
         # subprocess.run(["bash", "-c", cmd])
        
-        os.system(
-            f'env -i bash --norc --noprofile -c "./run/retrieve.sh {save_dir}" > run.log 2>&1'
-        )
+        repo_root = Path(__file__).resolve().parents[4]
+        retrieve_log = Path(save_dir) / "retrieve.log"
+        with open(retrieve_log, "w") as log_file:
+            subprocess.run(
+                ["bash", "./run/retrieve.sh", save_dir],
+                cwd=repo_root,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                check=True,
+            )
         with open(f"{save_dir}/objav_files.json", "r") as f:
             self.LoadObjavFiles = json.load(f)
         return

@@ -2,8 +2,16 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 
-sys.path.append("~/workspace/SceneWeaver/Pipeline")
+SCRIPT_DIR = Path(__file__).resolve().parent
+APP_ROOT = SCRIPT_DIR.parent
+PIPELINE_ROOT = APP_ROOT.parent
+REPO_ROOT = PIPELINE_ROOT.parent
+sys.path.insert(0, str(SCRIPT_DIR))
+sys.path.insert(0, str(APP_ROOT))
+sys.path.insert(0, str(PIPELINE_ROOT))
+sys.path.insert(0, str(REPO_ROOT))
 from gpt import GPT4
 from PIL import Image
 

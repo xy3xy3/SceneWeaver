@@ -48,8 +48,8 @@ class RemoveExecute(BaseTool):
             success = update_infinigen("remove_object", iter, json_name, ideas=ideas)
             assert success
             return "Successfully remove object with GPT."
-        except Exception:
-            return "Error remove object with GPT"
+        except Exception as e:
+            return f"Error remove object with GPT: {e}"
 
     def update_scene_gpt(self, user_demand, ideas, iter, roomtype):
         save_dir = os.getenv("save_dir")

@@ -1,3 +1,9 @@
+.local/
+Pipeline/key.txt
+outputs_runs/
+data/
+.cache/
+
 Python-*
 Python-*.tgz
 blender

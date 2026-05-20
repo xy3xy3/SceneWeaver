@@ -2,6 +2,7 @@ import json
 import os
 import socket
 import subprocess
+from pathlib import Path
 
 
 def send_command(host="localhost", port=12345, command=None):
@@ -59,18 +60,67 @@ def update_infinigen(
         f"cp {save_dir}/roominfo.json ../run/roominfo.json"
     )
 
+    def get_infinigen_python():
+        env_python = os.getenv("INFINIGEN_PYTHON")
+        if env_python and Path(env_python).exists():
+            return env_python
+
+        roots = []
+        conda_exe = os.getenv("CONDA_EXE")
+        if conda_exe:
+            conda_path = Path(conda_exe).expanduser().resolve()
+            roots.extend([conda_path.parent.parent, conda_path.parent])
+
+        for dirname in ("miniforge3", "mambaforge", "miniconda3", "anaconda3"):
+            roots.append(Path.home() / dirname)
+
+        seen = set()
+        for root in roots:
+            root = Path(root)
+            if root in seen:
+                continue
+            seen.add(root)
+            candidate = root / "envs/infinigen/bin/python"
+            if candidate.exists():
+                return str(candidate)
+
+        raise FileNotFoundError(
+            "Could not locate infinigen python. Set INFINIGEN_PYTHON explicitly."
+        )
+
     # # if invisible:
     sw_dir = os.getenv("sceneweaver_dir")
     socket = os.getenv("socket")
     if action == "export_supporter" or socket=="False":
-        # if True:
-        cmd = f"""
-        source ~/anaconda3/etc/profile.d/conda.sh
-        conda activate infinigen
-        cd {sw_dir}
-        python -m infinigen_examples.generate_indoors --seed 0 --save_dir {save_dir} --task coarse --output_folder outputs/indoors/coarse_expand_whole_nobedframe -g fast_solve.gin overhead.gin studio.gin -p compose_indoors.terrain_enabled=False compose_indoors.invisible_room_ceilings_enabled=True > {sw_dir}run.log 2>&1
-        """
-        subprocess.run(["bash", "-c", cmd])
+        cmd = [
+            get_infinigen_python(),
+            "-m",
+            "infinigen_examples.generate_indoors",
+            "--seed",
+            "0",
+            "--save_dir",
+            save_dir,
+            "--task",
+            "coarse",
+            "--output_folder",
+            "outputs/indoors/coarse_expand_whole_nobedframe",
+            "-g",
+            "fast_solve.gin",
+            "overhead.gin",
+            "studio.gin",
+            "-p",
+            "compose_indoors.terrain_enabled=False",
+            "compose_indoors.invisible_room_ceilings_enabled=True",
+        ]
+        log_path = Path(sw_dir) / "run.log"
+        with open(log_path, "w") as log_file:
+            subprocess.run(
+                cmd,
+                cwd=sw_dir,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                check=True,
+            )
         # else:
         #     os.system("bash -i ~/workspace/SceneWeaver/run.sh > run.log 2>&1")
     else:
@@ -87,6 +137,11 @@ def update_infinigen(
 
     with open(argsfile, "r") as f:
         j = json.load(f)
+
+    args_dir = Path(save_dir) / "args"
+    args_dir.mkdir(parents=True, exist_ok=True)
+    with open(args_dir / f"args_{iter}.json", "w") as f:
+        json.dump(j, f, indent=4)
 
     assert j["success"]
     print("infinigen success")

@@ -116,7 +116,7 @@ def preprocess_collision_query_cases(a, b, a_tags, b_tags):
 
     if isinstance(a, set) and len(a) == 0:
         raise ValueError(f"query recieved empty input {a=}")
-    if isinstance(a, set) and len(a) == 0:
+    if isinstance(b, set) and len(b) == 0:
         raise ValueError(f"query recieved empty input {b=}")
 
     # single-to-single is treated as many-to-single

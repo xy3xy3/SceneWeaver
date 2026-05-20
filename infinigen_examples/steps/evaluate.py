@@ -140,6 +140,10 @@ def eval_physics_score(state, remove_bad=False):
     for name in collision_objs_norug:
         col_objs = collision_objs_norug.copy()
         col_objs.remove(name)
+        if not col_objs:
+            # No peer objects remain to compare against, so this object cannot
+            # contribute a collision pair in this pass.
+            continue
         touch = any_touching(scene, name, col_objs, bvh_cache=state.bvh_cache)
         if name == "ObjaverseCategoryFactory(1083614).spawn_asset(8785162)":
             a = 1

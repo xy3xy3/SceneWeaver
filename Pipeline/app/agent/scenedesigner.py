@@ -415,7 +415,7 @@ class SceneDesigner:
             logger.info(f"🔧 Activating tool: '{name}'...")
             result = self.available_tools.execute(name=name, tool_input=args)
 
-            assert "Error" not in result
+            assert "Error" not in result, result
 
             # Handle special tools
             self._handle_special_tool(name=name, result=result)
@@ -496,10 +496,15 @@ class SceneDesigner:
         self.current_step = 0
         save_dir = os.getenv("save_dir")
         memory_path = f"{save_dir}/pipeline/memory_{self.current_step}.pkl"
+        roominfo_path = f"{save_dir}/roominfo.json"
         while os.path.exists(memory_path):
-            os.system(
-                f"cp {save_dir}/roominfo.json ../run/roominfo.json"
-            )
+            if not os.path.exists(roominfo_path):
+                logger.warning(
+                    f"Found stale memory state at {memory_path} without roominfo.json; starting from step 0."
+                )
+                self.current_step = 0
+                break
+            os.system(f"cp {roominfo_path} ../run/roominfo.json")
             self.current_step += 1
             memory_path = f"{save_dir}/pipeline/memory_{self.current_step}.pkl"
         # if os.path.exists(f"{save_dir}/pipeline/memory_{self.current_step}.pkl"):

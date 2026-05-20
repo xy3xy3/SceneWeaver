@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import threading
+from pathlib import Path
 
 import numpy as np
 import objaverse
@@ -17,8 +18,40 @@ import transformers
 from huggingface_hub import hf_hub_download
 from torch.nn import functional as F
 
-# Print device
-print("Device: ", torch.cuda.get_device_name(0))
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[2]
+PIPELINE_ROOT = REPO_ROOT / "Pipeline"
+OPENSHAPE_EMBEDDINGS_DIR = Path(
+    os.environ.get(
+        "OPENSHAPE_EMBEDDINGS_DIR",
+        str(REPO_ROOT / ".cache" / "openshape-embeddings"),
+    )
+).expanduser()
+OPENSHAPE_EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def find_conda_sh():
+    conda_exe = os.environ.get("CONDA_EXE")
+    if conda_exe:
+        candidate = Path(conda_exe).resolve().parent.parent / "etc/profile.d/conda.sh"
+        if candidate.is_file():
+            return candidate
+
+    for root in ("miniforge3", "mambaforge", "miniconda3", "anaconda3"):
+        candidate = Path.home() / root / "etc/profile.d/conda.sh"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+CONDA_SH = find_conda_sh()
+INFINIGEN_ENV = os.environ.get("SCENEWEAVER_INFINIGEN_ENV", "infinigen")
+SCENEWEAVER_ENV = os.environ.get("SCENEWEAVER_PLANNER_ENV", "sceneweaver")
+
+if torch.cuda.is_available():
+    print("Device:", torch.cuda.get_device_name(0))
+else:
+    print("Device: CPU")
 
 # Load the Pointcloud Encoder
 pc_encoder = openshape.load_pc_encoder("openshape-pointbert-vitg14-rgb")
@@ -31,7 +64,7 @@ meta = json.load(
             "objaverse_meta.json",
             token=True,
             repo_type="dataset",
-            local_dir="~/workspace/IDesign/OpenShape-Embeddings",
+            local_dir=str(OPENSHAPE_EMBEDDINGS_DIR),
         )
     )
 )
@@ -43,7 +76,7 @@ deser = torch.load(
         "objaverse.pt",
         token=True,
         repo_type="dataset",
-        local_dir="~/workspace/IDesign/OpenShape-Embeddings",
+        local_dir=str(OPENSHAPE_EMBEDDINGS_DIR),
     ),
     map_location="cpu",
 )
@@ -121,15 +154,37 @@ def preprocess(input_string):
     return output
 
 
+def run_in_env(env_name, command, log_name):
+    if CONDA_SH is None:
+        raise RuntimeError("Could not locate conda.sh for subprocess execution")
+
+    cmd = f"""
+    set -e
+    source "{CONDA_SH}"
+    conda activate "{env_name}"
+    cd "{REPO_ROOT}"
+    {command} > "{log_name}" 2>&1
+    """
+    subprocess.run(["bash", "-lc", cmd], check=False)
+
+
 if __name__ == "__main__":
     # with open("../roominfo.json","r") as f:
     #     j = json.load(f)
     #     roomtype = j["roomtype"]
     save_dir = sys.argv[1]
+    objav_cnts_path = Path(save_dir) / "objav_cnts.json"
+
+    if not objav_cnts_path.is_file():
+        raise FileNotFoundError(
+            f"Missing {objav_cnts_path}. "
+            "Run SceneWeaver first so it can write objav_cnts.json, "
+            "or create that file manually for a standalone retrieval test."
+        )
 
     # if not os.path.exists(f"{save_dir}/objav_files.json"):
     if True:
-        with open(f"{save_dir}/objav_cnts.json", "r") as f:
+        with open(objav_cnts_path, "r") as f:
             LoadObjavCnts = json.load(f)
 
         f32 = np.float32
@@ -185,23 +240,21 @@ if __name__ == "__main__":
                     break
 
                 # render
-                import os
-                current_file_path = os.path.abspath(__file__)
-                cmd = f"""
-                source /home/yandan/anaconda3/etc/profile.d/conda.sh
-                conda activate infinigen
-                python {current_file_path}/blender_render.py {file_path} > run1.log 2>&1
-                """
-                subprocess.run(["bash", "-c", cmd])
+                blender_render = SCRIPT_DIR / "blender_render.py"
+                run_in_env(
+                    INFINIGEN_ENV,
+                    f'python "{blender_render}" "{file_path}"',
+                    "run1.log",
+                )
 
                 # front view
 
-                cmd = f"""
-                source /home/yandan/anaconda3/etc/profile.d/conda.sh
-                conda activate sceneweaver
-                python {current_file_path}/../../../Pipeline/app/tool/objaverse_frontview.py {render_folder} {category} > run2.log 2>&1
-                """
-                subprocess.run(["bash", "-c", cmd])
+                frontview_script = PIPELINE_ROOT / "app/tool/objaverse_frontview.py"
+                run_in_env(
+                    SCENEWEAVER_ENV,
+                    f'python "{frontview_script}" "{render_folder}" "{category}"',
+                    "run2.log",
+                )
                 if os.path.exists(f"{render_folder}/metadata.json"):
                     LoadObjavFiles[category].append(file_path)
                     break

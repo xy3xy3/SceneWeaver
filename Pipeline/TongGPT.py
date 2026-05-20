@@ -1,27 +1,32 @@
-from openai import AzureOpenAI
+from openai import AzureOpenAI, OpenAI
 
-# from utils import local_image_to_data_url, resize, extract_json
+from app.config import config
 
 
 class TongGPT:
     def __init__(self, MODEL="gpt-35-turbo-0125", REGION="westus"):
         super().__init__()
         self.REGION = REGION
-        API_BASE = "https://api.tonggpt.mybigai.ac.cn/proxy"
-        self.ENDPOINT = f"{API_BASE}/{self.REGION}"
         self.MODEL = MODEL
-        with open("key.txt","r") as f:
-            lines = f.readlines()
-        self.API_KEY = lines[0].strip()
-        self.api_version = "2025-03-01-preview" #"2024-02-01"
+        llm_config = config.llm["default"]
+        self.api_type = llm_config.api_type.lower()
+        self.api_key = llm_config.api_key
+        self.base_url = llm_config.base_url
+        self.api_version = llm_config.api_version
         self.init_client()
 
     def init_client(self):
-        self.client = AzureOpenAI(
-            api_key=self.API_KEY,
-            api_version=self.api_version,
-            azure_endpoint=self.ENDPOINT,
-        )
+        if self.api_type == "azure":
+            self.client = AzureOpenAI(
+                api_key=self.api_key,
+                api_version=self.api_version,
+                azure_endpoint=self.base_url,
+            )
+        else:
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url,
+            )
         return self.client
 
     def send_request(self, kw):
@@ -53,33 +58,3 @@ class GPT4o(TongGPT):
 class GPT4V(GPT4o):
     def __init__(self, MODEL="gpt-4-vision-preview", REGION="australiaeast"):
         super().__init__(MODEL, REGION)
-
-
-# if __name__ == "__main__":
-#     #     tonggpt = TongGPT()
-#     #     response = tonggpt.send_request("Say Hello!")
-#     #     a = 1
-#     #     # gen_results(job_id)
-
-#     from openai import AzureOpenAI
-
-#     REGION = "southcentralus"
-#     MODEL = "gpt-4-0125-preview"
-#     API_KEY = "e989ba33fe61d1251d2921132320c92c"
-
-#     API_BASE = "https://api.tonggpt.mybigai.ac.cn/proxy"
-#     ENDPOINT = f"{API_BASE}/{REGION}"
-
-#     client = AzureOpenAI(
-#         api_key=API_KEY,
-#         api_version="2024-02-01",
-#         azure_endpoint=ENDPOINT,
-#     )
-
-#     response = client.chat.completions.create(
-#         model=MODEL,
-#         messages=[{"role": "user", "content": "Say Hello."}],
-#     )
-
-#     print(response.model_dump_json(indent=2))
-#     print(response.choices[0].message.content)

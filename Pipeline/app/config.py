@@ -91,13 +91,18 @@ class Config:
             return json.load(f)
 
     def _load_initial_config(self):
+        config_path = self._get_config_path()
         raw_config = self._load_config()
         base_llm = raw_config.get("llm", {})
         llm_overrides = {
             k: v for k, v in raw_config.get("llm", {}).items() if isinstance(v, dict)
         }
 
-        with open(base_llm.get("api_key"), "r") as f:
+        api_key_path = Path(base_llm.get("api_key"))
+        if not api_key_path.is_absolute():
+            api_key_path = config_path.parent.parent / api_key_path
+
+        with open(api_key_path, "r") as f:
             lines = f.readlines()
         API_KEY = lines[0].strip()
 

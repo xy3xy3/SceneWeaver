@@ -1,12 +1,14 @@
 import math
 import os
 import sys
+from pathlib import Path
 
 import bpy
 from mathutils import Vector
 
-sys.path.append("~/workspace/Tabletop-Digital-Cousins/digital_cousins/models/blend/")
-sys.path.append("~/workspace/SceneWeaver")
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 import mathutils
 import numpy as np
 from scipy.spatial.transform import Rotation

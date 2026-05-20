@@ -6,6 +6,7 @@
 
 import argparse
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -13,6 +14,7 @@ root = Path(__file__).parent.parent
 
 BLENDER_BINARY_RELATIVE = [
     root / "blender/blender",
+    root / ".local/blender-3.6/blender",
     root / "Blender.app/Contents/MacOS/Blender",
 ]
 
@@ -29,14 +31,32 @@ HEADLESS_ARGS = [
 
 # 获取Blender可执行文件的路径
 def get_standalone_blender_path():
-    try:
-        return next(x for x in BLENDER_BINARY_RELATIVE if x.exists())
-    except StopIteration:
-        raise ValueError(
-            "Could not find blender binary - please check you have completed "
-            "'Infinigen as a Blender-Python script' section of docs/Installation.md"
-            f" and that one of {BLENDER_BINARY_RELATIVE} exists"
-        )
+    candidates = []
+    for env_name in ("SCENEWEAVER_BLENDER", "BLENDER_BIN", "BLENDER_PATH"):
+        env_value = os.getenv(env_name)
+        if env_value:
+            candidates.append(Path(env_value).expanduser())
+
+    candidates.extend(BLENDER_BINARY_RELATIVE)
+
+    blender_on_path = shutil.which("blender")
+    if blender_on_path:
+        candidates.append(Path(blender_on_path))
+
+    seen = set()
+    for candidate in candidates:
+        candidate = candidate.resolve()
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return candidate
+
+    raise ValueError(
+        "Could not find blender binary. Checked environment overrides "
+        "(SCENEWEAVER_BLENDER, BLENDER_BIN, BLENDER_PATH), repo-local Blender "
+        f"locations {BLENDER_BINARY_RELATIVE}, and PATH."
+    )
 
 
 if __name__ == "__main__":

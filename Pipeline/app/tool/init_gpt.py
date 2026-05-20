@@ -20,6 +20,56 @@ Weaknesses: May not be as real as data-driven methods.
 """
 
 
+def filter_supported_scene_objects(
+    category_dict,
+    name_mapping,
+    placement=None,
+    against_wall=None,
+    relations=None,
+):
+    filtered_category_dict = dict(category_dict)
+    filtered_name_mapping = dict(name_mapping)
+    for category in filtered_category_dict:
+        filtered_name_mapping.setdefault(category, None)
+
+    filtered_placement = None
+    if placement is not None:
+        filtered_placement = {}
+        for category, objects in placement.items():
+            if category not in filtered_category_dict:
+                continue
+
+            kept_objects = {}
+            for obj_id, obj_info in objects.items():
+                kept_objects[obj_id] = obj_info
+
+            if kept_objects:
+                filtered_placement[category] = kept_objects
+
+    filtered_against_wall = None
+    if against_wall is not None:
+        filtered_against_wall = [
+            category for category in against_wall if category in filtered_category_dict
+        ]
+
+    filtered_relations = None
+    if relations is not None:
+        filtered_relations = [
+            relation
+            for relation in relations
+            if len(relation) >= 2
+            and relation[0] in filtered_category_dict
+        ]
+
+    return (
+        filtered_category_dict,
+        filtered_name_mapping,
+        filtered_placement,
+        filtered_against_wall,
+        filtered_relations,
+    )
+
+
 class InitGPTExecute(BaseTool):
     """A tool for executing Python code with timeout and safety restrictions."""
 
@@ -77,8 +127,8 @@ class InitGPTExecute(BaseTool):
             assert success
 
             return "Successfully initialize scene with GPT."
-        except Exception:
-            return "Error initializing scene with GPT."
+        except Exception as e:
+            return f"Error initializing scene with GPT: {e}"
 
     def gen_gpt_scene(self, user_demand, ideas, roomtype):
         json_name = self.generate_scene_iter0(user_demand, ideas, roomtype)
@@ -170,6 +220,20 @@ class InitGPTExecute(BaseTool):
             gpt_text_response.replace("'", '"').replace("None", "null")
         )
         name_mapping = gpt_dict_response["Mapping results"]
+
+        (
+            big_category_dict,
+            name_mapping,
+            Placement_big,
+            category_against_wall,
+            relation_big_object,
+        ) = filter_supported_scene_objects(
+            big_category_dict,
+            name_mapping,
+            placement=Placement_big,
+            against_wall=category_against_wall,
+            relations=relation_big_object,
+        )
 
         results["user_demand"] = user_demand
         results["roomsize"] = roomsize
