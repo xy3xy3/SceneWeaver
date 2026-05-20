@@ -51,7 +51,7 @@ conda env create -n infinigen_python -f environment.yml
 ```bash
 conda activate infinigen_python
 python -V
-python -c "import bpy; print(bpy.app.version_string)"
+python -c "import infinigen; print(infinigen.__version__)"
 conda deactivate
 ```
 
@@ -254,19 +254,20 @@ conda deactivate
 ```bash
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate infinigen_python
-python -c "import bpy; print('bpy ok:', bpy.app.version_string)"
+python -c "import infinigen; print('infinigen ok:', infinigen.__version__)"
 conda deactivate
 ```
 
-再测本地 Blender：
+再测本地 Blender 和它自带的 `bpy`：
 
 ```bash
 /home/xy3/ht/SceneWeaver/.local/blender-3.6/blender -v
+/home/xy3/ht/SceneWeaver/.local/blender-3.6/3.6/python/bin/python3.10 -c "import bpy; print('bpy ok:', bpy.app.version_string)"
 ```
 
 ## 8. 已知坑
 
-- 不要把系统 `Blender 5.1.0` 和项目要求的 `bpy==3.6.0` 混着当同一套运行时
+- 不要把系统 `Blender 5.1.0` 和项目要求的官方 Blender 3.6 运行时混着当同一套运行时
 - `Pipeline/config/config.json` 和 `Pipeline/key.txt` 要同时存在
 - 仓库默认代码还引用了一些外部数据集路径；如果你要完整跑 `init_physcene` / `init_metascene`，后面还要补数据资源
 - 如果只是先验证主流程跑通，优先从 `init_gpt` 路线开始

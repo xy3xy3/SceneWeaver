@@ -54,30 +54,13 @@ conda env create --prefix /home/yandan/anaconda3/envs/sceneweaver -f environment
 
 #### Prepare conda env for SceneWeaver's executor :
 ```
-conda create --name infinigen python=3.10.14
-conda activate infinigen 
-pip install bpy==3.6.0
-pip install gin-config
-pip install frozendict
-pip install shapely
-pip install trimesh
-pip install tqdm
-pip install opencv-python
-pip install matplotlib
-pip install imageio
-pip install scipy
-pip install scikit-learn
-pip install psutil
-pip install scikit-image
-pip install submitit
-pip install python-fcl
-pip install pandas
-pip install geomdl
-pip install Rtree
-
+conda env create -n infinigen_python -f environment.yml
+conda activate infinigen_python
 ```
 
-Then, install using one of the options below:
+`bpy` is provided by Blender's own Python runtime, so it should not be installed
+from PyPI. Install Blender 3.6 from the official Blender download with one of
+the options below:
 ```
 # Minimal installation (recommended setting for use in the Blender UI)
 INFINIGEN_MINIMAL_INSTALL=True bash scripts/install/interactive_blender.sh
