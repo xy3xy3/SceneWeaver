@@ -62,8 +62,8 @@ def update_infinigen(
 
     def get_infinigen_python():
         env_python = os.getenv("INFINIGEN_PYTHON")
-        if env_python and Path(env_python).exists():
-            return env_python
+        if env_python and Path(env_python).expanduser().exists():
+            return str(Path(env_python).expanduser())
 
         roots = []
         conda_exe = os.getenv("CONDA_EXE")
@@ -74,15 +74,18 @@ def update_infinigen(
         for dirname in ("miniforge3", "mambaforge", "miniconda3", "anaconda3"):
             roots.append(Path.home() / dirname)
 
+        # Support both the documented env name and the actual local setup.
+        candidate_env_names = ("infinigen_python", "infinigen")
         seen = set()
         for root in roots:
             root = Path(root)
             if root in seen:
                 continue
             seen.add(root)
-            candidate = root / "envs/infinigen/bin/python"
-            if candidate.exists():
-                return str(candidate)
+            for env_name in candidate_env_names:
+                candidate = root / f"envs/{env_name}/bin/python"
+                if candidate.exists():
+                    return str(candidate)
 
         raise FileNotFoundError(
             "Could not locate infinigen python. Set INFINIGEN_PYTHON explicitly."
