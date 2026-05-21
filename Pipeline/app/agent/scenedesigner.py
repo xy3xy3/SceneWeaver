@@ -509,10 +509,14 @@ class SceneDesigner:
             if not os.path.exists(roominfo_path) or not step_snapshot_complete(
                 self.current_step
             ):
-                logger.warning(
-                    f"Found stale memory state at step {self.current_step}; starting from step 0."
-                )
-                self.current_step = 0
+                if self.current_step == 0:
+                    logger.warning(
+                        "Found stale memory state at step 0; starting from step 0."
+                    )
+                else:
+                    logger.warning(
+                        f"Found incomplete snapshot at step {self.current_step}; resuming from this step."
+                    )
                 break
             os.system(f"cp {roominfo_path} ../run/roominfo.json")
             self.current_step += 1

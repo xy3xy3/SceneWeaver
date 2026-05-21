@@ -9,6 +9,7 @@ import mathutils
 
 from infinigen.assets.materials import invisible_to_camera
 from infinigen.core.placement import camera as cam_util
+from infinigen.core.util.camera import points_inview
 from infinigen.core import tagging
 from infinigen.core import tags as t
 from infinigen.core.constraints.example_solver.room import decorate as room_dec
@@ -357,6 +358,46 @@ def render_scene(
         bpy.context.scene.render.filepath = os.path.join(output_path)
         bpy.ops.render.render(write_still=True)
 
+    def render_perspective_still(camera_obj, output_path, bbox):
+        original_matrix_world = camera_obj.matrix_world.copy()
+        original_lens = camera_obj.data.lens
+
+        mins = mathutils.Vector(bbox[0])
+        maxs = mathutils.Vector(bbox[1])
+        center = (mins + maxs) * 0.5
+        size = maxs - mins
+        base_xy = max(size.x, size.y, 1.5)
+        base_z = max(size.z, 1.8)
+        target = center + mathutils.Vector((0, 0, max(size.z * 0.15, 0.4)))
+
+        try:
+            # Use a stable 3/4 indoor view instead of relying on whatever
+            # transient pose the camera rig happened to have before overhead render.
+            camera_obj.data.lens = 24
+            for factor in [1.1 + 0.15 * i for i in range(28)]:
+                location = center + mathutils.Vector(
+                    (
+                        -base_xy * factor,
+                        -base_xy * 0.85 * factor,
+                        base_z * (0.65 + 0.22 * factor),
+                    )
+                )
+                rotation = (target - location).to_track_quat("-Z", "Y")
+                camera_obj.matrix_world = mathutils.Matrix.LocRotScale(
+                    location,
+                    rotation,
+                    mathutils.Vector((1.0, 1.0, 1.0)),
+                )
+                bpy.context.view_layer.update()
+                if points_inview(bbox, camera_obj).all():
+                    break
+
+            render_still(camera_obj, output_path)
+        finally:
+            camera_obj.matrix_world = original_matrix_world
+            camera_obj.data.lens = original_lens
+            bpy.context.view_layer.update()
+
     def invisible_room_ceilings():
         rooms_split["exterior"].hide_viewport = True
         rooms_split["exterior"].hide_render = True
@@ -387,7 +428,9 @@ def render_scene(
             ".jpg", "_perspective.jpg"
         )
         perspective_camera = cam_util.get_camera(0, 0)
-        render_still(perspective_camera, perspective_filename)
+        render_perspective_still(
+            perspective_camera, perspective_filename, solved_bbox
+        )
 
     p.run_stage(
         "overhead_cam",
