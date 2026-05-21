@@ -8,6 +8,7 @@ import dill
 import mathutils
 
 from infinigen.assets.materials import invisible_to_camera
+from infinigen.core.placement import camera as cam_util
 from infinigen.core import tagging
 from infinigen.core import tags as t
 from infinigen.core.constraints.example_solver.room import decorate as room_dec
@@ -341,6 +342,21 @@ def delete_collection_and_objects(collection_name):
 def render_scene(
     p, solved_bbox, camera_rigs, state, solver, filename="debug.jpg", transparent=False
 ):
+    def render_still(camera_obj, output_path):
+        bpy.context.scene.camera = camera_obj
+        bpy.context.scene.render.resolution_x = 1920
+        bpy.context.scene.render.resolution_y = 1080
+
+        if transparent:
+            bpy.context.scene.render.image_settings.file_format = "PNG"
+            bpy.context.scene.render.image_settings.color_mode = "RGBA"
+            bpy.context.scene.render.film_transparent = True
+        else:
+            bpy.context.scene.render.image_settings.file_format = "JPEG"
+            bpy.context.scene.render.film_transparent = False
+        bpy.context.scene.render.filepath = os.path.join(output_path)
+        bpy.ops.render.render(write_still=True)
+
     def invisible_room_ceilings():
         rooms_split["exterior"].hide_viewport = True
         rooms_split["exterior"].hide_render = True
@@ -359,6 +375,20 @@ def render_scene(
             "invisible_room_ceilings", invisible_room_ceilings, use_chance=False
         )
 
+    invisible_others(hide_placeholder=True)
+    render_perspective = os.getenv("SCENEWEAVER_RENDER_PERSPECTIVE", "").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if render_perspective:
+        perspective_filename = filename.replace(".png", "_perspective.png").replace(
+            ".jpg", "_perspective.jpg"
+        )
+        perspective_camera = cam_util.get_camera(0, 0)
+        render_still(perspective_camera, perspective_filename)
+
     p.run_stage(
         "overhead_cam",
         place_cam_overhead,
@@ -367,24 +397,7 @@ def render_scene(
         use_chance=False,
     )
     delete_collection_and_objects("mark")
-
-    # camera_rigs[0].rotation_euler = [0,0,1.57]
-    bpy.context.scene.camera = camera_rigs[0]
-
-    invisible_others(hide_placeholder=True)
-    bpy.context.scene.render.resolution_x = 1920
-    bpy.context.scene.render.resolution_y = 1080
-
-    if transparent:
-        bpy.context.scene.render.image_settings.file_format = "PNG"
-        bpy.context.scene.render.image_settings.color_mode = (
-            "RGBA"  # Include alpha channel
-        )
-        bpy.context.scene.render.film_transparent = True  # For Cycles
-    else:
-        bpy.context.scene.render.image_settings.file_format = "JPEG"
-    bpy.context.scene.render.filepath = os.path.join(filename)
-    bpy.ops.render.render(write_still=True)
+    render_still(cam_util.get_camera(0, 0), filename)
     visible_others()
 
     invisible_others(hide_all=True)
