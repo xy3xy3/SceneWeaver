@@ -10,13 +10,19 @@ import sys
 import threading
 from pathlib import Path
 
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 import numpy as np
 import objaverse
-import openshape
 import torch
 import transformers
 from huggingface_hub import hf_hub_download
 from torch.nn import functional as F
+
+try:
+    import openshape
+except ImportError:
+    openshape = None
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[2]
@@ -53,8 +59,13 @@ if torch.cuda.is_available():
 else:
     print("Device: CPU")
 
-# Load the Pointcloud Encoder
-pc_encoder = openshape.load_pc_encoder("openshape-pointbert-vitg14-rgb")
+# SceneWeaver's Objaverse retrieval only uses CLIP text features against the
+# precomputed OpenShape embeddings below. The point cloud encoder is optional.
+if openshape is None:
+    print("OpenShape package not found; continuing without local point-cloud encoder.")
+    pc_encoder = None
+else:
+    pc_encoder = openshape.load_pc_encoder("openshape-pointbert-vitg14-rgb")
 
 # Get the pre-computed embeddings
 meta = json.load(
@@ -70,6 +81,10 @@ meta = json.load(
 )
 
 meta = {x["u"]: x for x in meta["entries"]}
+torch_load_kwargs = {"map_location": "cpu"}
+if "weights_only" in torch.load.__code__.co_varnames:
+    torch_load_kwargs["weights_only"] = False
+
 deser = torch.load(
     hf_hub_download(
         "OpenShape/openshape-objaverse-embeddings",
@@ -78,7 +93,7 @@ deser = torch.load(
         repo_type="dataset",
         local_dir=str(OPENSHAPE_EMBEDDINGS_DIR),
     ),
-    map_location="cpu",
+    **torch_load_kwargs,
 )
 us = deser["us"]
 feats = deser["feats"]
@@ -97,16 +112,26 @@ def load_openclip():
     print("Locking...")
     sys.clip_move_lock = threading.Lock()
     print("Locked.")
+    model_name = "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k"
+    model_kwargs = {"torch_dtype": half}
+    try:
+        import accelerate  # noqa: F401
+
+        model_kwargs.update(
+            {
+                "low_cpu_mem_usage": True,
+                "offload_state_dict": True,
+            }
+        )
+    except ImportError:
+        print("Accelerate not found; falling back to standard CLIP model loading.")
+
     clip_model, clip_prep = (
         transformers.CLIPModel.from_pretrained(
-            "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k",
-            low_cpu_mem_usage=True,
-            torch_dtype=half,
-            offload_state_dict=True,
+            model_name,
+            **model_kwargs,
         ),
-        transformers.CLIPProcessor.from_pretrained(
-            "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k"
-        ),
+        transformers.CLIPProcessor.from_pretrained(model_name),
     )
     if torch.cuda.is_available():
         with sys.clip_move_lock:
