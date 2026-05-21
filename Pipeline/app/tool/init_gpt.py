@@ -1,5 +1,6 @@
 import json
 import os
+import re
 
 from gpt import GPT4
 
@@ -19,6 +20,49 @@ Weaknesses: May not be as real as data-driven methods.
 
 """
 
+CANONICAL_FACTORY_ALIASES = {
+    "armchair": "seating.ArmChairFactory",
+    "bookcolumn": "table_decorations.BookColumnFactory",
+    "bookstack": "table_decorations.BookStackFactory",
+    "coffeetable": "tables.CoffeeTableFactory",
+    "cup": "tableware.CupFactory",
+    "desklamp": "lamp.DeskLampFactory",
+    "floorlamp": "lamp.FloorLampFactory",
+    "largeplantcontainer": "tableware.LargePlantContainerFactory",
+    "mirror": "wall_decorations.MirrorFactory",
+    "plantcontainer": "tableware.PlantContainerFactory",
+    "rug": "elements.RugFactory",
+    "sidetable": "tables.SideTableFactory",
+    "simplebookcase": "shelves.SimpleBookcaseFactory",
+    "sofa": "seating.SofaFactory",
+    "tvstand": "shelves.TVStandFactory",
+    "vase": "table_decorations.VaseFactory",
+    "wallshelf": "wall_decorations.WallShelfFactory",
+}
+
+
+def normalize_category_name(name):
+    return re.sub(r"[^a-z0-9]", "", str(name).lower())
+
+
+def resolve_name_mapping(category_dict, name_mapping):
+    raw_name_mapping = dict(name_mapping or {})
+    normalized_mapping = {
+        normalize_category_name(category): factory
+        for category, factory in raw_name_mapping.items()
+    }
+
+    resolved_mapping = {}
+    for category in dict(category_dict).keys():
+        normalized_category = normalize_category_name(category)
+        factory = raw_name_mapping.get(category)
+        if not factory:
+            factory = normalized_mapping.get(normalized_category)
+        if not factory:
+            factory = CANONICAL_FACTORY_ALIASES.get(normalized_category)
+        resolved_mapping[category] = factory
+    return resolved_mapping
+
 
 def filter_supported_scene_objects(
     category_dict,
@@ -28,9 +72,10 @@ def filter_supported_scene_objects(
     relations=None,
 ):
     unsupported_categories = {"NatureShelfTrinkets", "nature_shelf_trinkets"}
+    resolved_name_mapping = resolve_name_mapping(category_dict, name_mapping)
     filtered_name_mapping = {
         category: factory
-        for category, factory in dict(name_mapping).items()
+        for category, factory in resolved_name_mapping.items()
         if factory and category not in unsupported_categories
     }
     filtered_category_dict = {
