@@ -262,10 +262,7 @@ class SceneDesigner:
         retry = 0
         while True and retry < 3:
             try:
-                if len(self.messages) > 7:
-                    messages = [self.messages[0]] + self.messages[-6:]
-                else:
-                    messages = self.messages
+                messages = self._select_messages_for_llm(self.messages, max_groups=6)
                 # messages = self.messages[:2]
                 # Get response with tool options
                 response = self.llm.ask_tool(
@@ -360,6 +357,61 @@ class SceneDesigner:
                 )
             )
             return False
+
+    @staticmethod
+    def _group_messages_for_llm(messages: List[Message]) -> List[List[Message]]:
+        """
+        Group assistant(tool_calls) + following tool messages together to avoid
+        sending orphaned tool messages (which OpenAI rejects).
+        """
+        groups: List[List[Message]] = []
+        i = 0
+        while i < len(messages):
+            msg = messages[i]
+            # Tool messages must directly respond to a previous assistant tool_calls message.
+            # If we see an orphan tool message, drop it from context to prevent invalid requests.
+            if msg.role == "tool":
+                i += 1
+                continue
+
+            if msg.role == "assistant" and msg.tool_calls:
+                group = [msg]
+                j = i + 1
+                while j < len(messages) and messages[j].role == "tool":
+                    group.append(messages[j])
+                    j += 1
+                groups.append(group)
+                i = j
+                continue
+
+            groups.append([msg])
+            i += 1
+
+        return groups
+
+    @classmethod
+    def _select_messages_for_llm(
+        cls, messages: List[Message], max_groups: int
+    ) -> List[Message]:
+        """
+        Keep the first message (user demand) plus the last `max_groups` groups, where each
+        group preserves assistant tool_calls + tool responses. This prevents the
+        "messages with role 'tool' must be a response to a preceding message with 'tool_calls'"
+        invalid_request_error when truncating context.
+        """
+        if not messages:
+            return []
+
+        groups = cls._group_messages_for_llm(messages)
+        if len(groups) <= (max_groups + 1):
+            return [m for g in groups for m in g]
+
+        selected_idxs = {0, *range(max(1, len(groups) - max_groups), len(groups))}
+        selected: List[Message] = []
+        for idx, group in enumerate(groups):
+            if idx in selected_idxs:
+                selected.extend(group)
+        return selected
 
     def act(self) -> str:
         """Execute tool calls and handle their results"""

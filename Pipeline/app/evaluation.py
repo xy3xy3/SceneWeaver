@@ -200,16 +200,32 @@ You are working in a 3D scene environment with the following conventions:
 
 """
 
-    prompt_payload = gpt.get_payload_eval(
-        prompting_text_user=prompting_text_user, render_path=image_path_1
-    )
+    # Some upstream providers/models may silently drop image inputs. If the response
+    # indicates the model didn't receive the image, fall back to layout-only eval.
+    def build_payload(with_image: bool):
+        return gpt.get_payload_eval(
+            prompting_text_user=prompting_text_user,
+            render_path=(image_path_1 if with_image else None),
+        )
+
+    prompt_payload = build_payload(with_image=True)
 
     grades = {"realism": [], "functionality": [], "layout": [], "completion": []}
     for _ in range(1):
         try:
             grading_str = gpt(payload=prompt_payload, verbose=True)
-        except:
+        except Exception:
             time.sleep(30)
+            grading_str = gpt(payload=prompt_payload, verbose=True)
+
+        # Fallback: if the model says it can't see the image, retry without image.
+        if isinstance(grading_str, str) and (
+            "do not see the room render image" in grading_str.lower()
+            or "i do not see the room render image" in grading_str.lower()
+            or "please upload the room render image" in grading_str.lower()
+            or "i can't see the image" in grading_str.lower()
+        ):
+            prompt_payload = build_payload(with_image=False)
             grading_str = gpt(payload=prompt_payload, verbose=True)
         print(grading_str)
         print("-" * 50)
