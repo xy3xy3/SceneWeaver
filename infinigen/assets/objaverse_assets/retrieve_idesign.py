@@ -51,7 +51,7 @@ def find_conda_sh():
 
 
 CONDA_SH = find_conda_sh()
-INFINIGEN_ENV = os.environ.get("SCENEWEAVER_INFINIGEN_ENV", "infinigen")
+INFINIGEN_ENV = os.environ.get("SCENEWEAVER_INFINIGEN_ENV", "infinigen_python")
 SCENEWEAVER_ENV = os.environ.get("SCENEWEAVER_PLANNER_ENV", "sceneweaver")
 
 if torch.cuda.is_available():
@@ -183,14 +183,29 @@ def run_in_env(env_name, command, log_name):
     if CONDA_SH is None:
         raise RuntimeError("Could not locate conda.sh for subprocess execution")
 
-    cmd = f"""
-    set -e
-    source "{CONDA_SH}"
-    conda activate "{env_name}"
-    cd "{REPO_ROOT}"
-    {command} > "{log_name}" 2>&1
-    """
-    subprocess.run(["bash", "-lc", cmd], check=False)
+    env_candidates = [env_name]
+    if env_name != "infinigen_python":
+        env_candidates.append("infinigen_python")
+    if env_name != "infinigen":
+        env_candidates.append("infinigen")
+
+    last_error = None
+    for candidate in env_candidates:
+        cmd = f"""
+        set -e
+        source "{CONDA_SH}"
+        conda activate "{candidate}"
+        cd "{REPO_ROOT}"
+        {command} > "{log_name}" 2>&1
+        """
+        result = subprocess.run(["bash", "-lc", cmd], check=False)
+        if result.returncode == 0:
+            return
+        last_error = candidate
+
+    raise RuntimeError(
+        f"Could not activate any conda env from {env_candidates}; last tried {last_error}"
+    )
 
 
 if __name__ == "__main__":
