@@ -54,6 +54,38 @@ CONDA_SH = find_conda_sh()
 INFINIGEN_ENV = os.environ.get("SCENEWEAVER_INFINIGEN_ENV", "infinigen_python")
 SCENEWEAVER_ENV = os.environ.get("SCENEWEAVER_PLANNER_ENV", "sceneweaver")
 
+
+def get_blender_binary():
+    candidates = []
+    for env_name in ("SCENEWEAVER_BLENDER", "BLENDER_BIN", "BLENDER_PATH", "INFINIGEN_BLENDER"):
+        env_value = os.getenv(env_name)
+        if env_value:
+            candidates.append(Path(env_value).expanduser())
+
+    sceneweaver_root = Path(
+        os.getenv("sceneweaver_dir", Path(__file__).resolve().parents[3])
+    )
+    candidates.extend(
+        [
+            sceneweaver_root / ".local/blender-3.6/blender",
+            sceneweaver_root / "blender/blender",
+            sceneweaver_root / "Blender.app/Contents/MacOS/Blender",
+        ]
+    )
+
+    seen = set()
+    for candidate in candidates:
+        candidate = candidate.expanduser().resolve()
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return str(candidate)
+
+    raise FileNotFoundError(
+        "Could not locate blender binary. Set SCENEWEAVER_BLENDER, BLENDER_BIN, or BLENDER_PATH explicitly."
+    )
+
 if torch.cuda.is_available():
     print("Device:", torch.cuda.get_device_name(0))
 else:
@@ -208,6 +240,37 @@ def run_in_env(env_name, command, log_name):
     )
 
 
+def run_blender_script(script_path, script_arg, log_name):
+    blender_binary = get_blender_binary()
+    sceneweaver_root = Path(
+        os.getenv("sceneweaver_dir", Path(__file__).resolve().parents[3])
+    ).resolve()
+    env = os.environ.copy()
+    pythonpath_parts = [str(sceneweaver_root)]
+    if env.get("PYTHONPATH"):
+        pythonpath_parts.append(env["PYTHONPATH"])
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
+
+    cmd = [
+        blender_binary,
+        "--background",
+        "-noaudio",
+        "--python",
+        str(script_path),
+        "--",
+        str(script_arg),
+    ]
+    with open(log_name, "w") as log_file:
+        subprocess.run(
+            cmd,
+            cwd=str(sceneweaver_root),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            env=env,
+            check=True,
+        )
+
+
 if __name__ == "__main__":
     # with open("../roominfo.json","r") as f:
     #     j = json.load(f)
@@ -281,11 +344,7 @@ if __name__ == "__main__":
 
                 # render
                 blender_render = SCRIPT_DIR / "blender_render.py"
-                run_in_env(
-                    INFINIGEN_ENV,
-                    f'python "{blender_render}" "{file_path}"',
-                    "run1.log",
-                )
+                run_blender_script(blender_render, file_path, "run1.log")
 
                 # front view
 

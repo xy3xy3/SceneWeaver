@@ -446,8 +446,8 @@ if __name__ == "__main__":
     bpy.context.scene.render.resolution_x = 512  # Width in pixels
     bpy.context.scene.render.resolution_y = 512
 
-    # mesh_path = "~/.objaverse/hf-objaverse-v1/glbs/000-088/70e32260ba8a4c7aa8f3a230f5fccabd.glb"
-    mesh_path = sys.argv[1]
+    # Blender prepends its own flags; the user arg is after `--`.
+    mesh_path = sys.argv[sys.argv.index("--") + 1] if "--" in sys.argv else sys.argv[1]
     imported_obj = load_glb(mesh_path)
     print(f"Rendering objaverse assets {mesh_path} 90 degrees ...")
     save_dir = mesh_path.replace(".glb", "")
