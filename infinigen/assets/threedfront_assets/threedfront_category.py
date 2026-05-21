@@ -6,6 +6,7 @@
 
 
 import math
+import os
 from pathlib import Path
 
 import bpy
@@ -33,8 +34,33 @@ class ThreedFrontCategoryFactory(ThreedFrontFactory):
         self.rotation_orig = self._rotation
         self.location_orig = self._position
 
-    def create_asset(self, **params) -> bpy.types.Object:
+    def _resolve_asset_path(self):
         asset_path = Path(self.asset_file).expanduser() if self.asset_file else None
+        if asset_path is not None and asset_path.exists():
+            return asset_path
+
+        if asset_path is None:
+            return None
+
+        # Older PhyScene samples store the author's absolute path. Remap them to
+        # local installs when the original file is unavailable.
+        asset_id = asset_path.parent.name
+        fallback_roots = []
+        env_root = os.environ.get("THREED_FUTURE_DIR")
+        if env_root:
+            fallback_roots.append(Path(env_root).expanduser())
+        fallback_roots.append(Path.home() / "dataset" / "3D-scene" / "3D-FUTURE-model")
+        fallback_roots.append(Path.home() / "workspace" / "PhyScene" / "3D_front" / "3D-FUTURE-model")
+
+        for root in fallback_roots:
+            candidate = root / asset_id / asset_path.name
+            if candidate.exists():
+                return candidate
+
+        return asset_path
+
+    def create_asset(self, **params) -> bpy.types.Object:
+        asset_path = self._resolve_asset_path()
         if asset_path is None or not asset_path.exists():
             print(f"[ThreedFront] Missing asset '{self.asset_file}', using proxy cube.")
             bpy.ops.mesh.primitive_cube_add(location=(0, 0, 0))
