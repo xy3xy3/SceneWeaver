@@ -64,6 +64,31 @@ def resolve_name_mapping(category_dict, name_mapping):
     return resolved_mapping
 
 
+def query_gpt_json(gpt, prompt_payload, required_keys, retries=5):
+    last_error = None
+    last_response = None
+
+    for _ in range(retries):
+        last_response = gpt(payload=prompt_payload, verbose=True)
+        print(last_response)
+        try:
+            response_dict = extract_json(
+                last_response.replace("'", '"').replace("None", "null")
+            )
+            missing_keys = [key for key in required_keys if key not in response_dict]
+            if missing_keys:
+                raise KeyError(
+                    f"Missing keys {missing_keys} in GPT response: {response_dict.keys()}"
+                )
+            return response_dict, last_response
+        except Exception as exc:
+            last_error = exc
+
+    raise ValueError(
+        f"Failed to parse GPT response after {retries} attempts: {last_error}\nLast response:\n{last_response}"
+    )
+
+
 def filter_supported_scene_objects(
     category_dict,
     name_mapping,
@@ -201,13 +226,21 @@ class InitGPTExecute(BaseTool):
         prompt_payload = gpt.get_payload(
             prompts.step_1_big_object_prompt_system, user_prompt
         )
-        gpt_text_response = gpt(payload=prompt_payload, verbose=True)
-        print(gpt_text_response)
+        gpt_dict_response, gpt_text_response = query_gpt_json(
+            gpt,
+            prompt_payload,
+            required_keys=[
+                "Room size",
+                "Category list of big object",
+                "Object against the wall",
+                "Relation between big objects",
+            ],
+            retries=3,
+        )
 
         # gpt_text_response ='{\n    "Roomtype": "Living Room",\n    "Category list of big object": {\n        "sofa": 2,\n        "armchair": 2,\n        "coffee table": 1,\n        "TV stand": 1,\n        "large shelf": 1,\n        "side table": 2,\n        "floor lamp": 2\n    },\n    "Object against the wall": ["TV stand", "large shelf"],\n    "Relation between big objects": [\n        ["armchair", "coffee table", "front_against"],\n        ["sofa", "coffee table", "front_against"],\n        ["side table", "sofa", "side_by_side"],\n        ["floor lamp", "armchair", "side_by_side"]\n    ]\n}'
 
         # response = [i for i in gpt_text_response.split("\n") if len(i)>0]
-        gpt_dict_response = extract_json(gpt_text_response)
         roomsize = gpt_dict_response["Room size"]
         big_category_dict = gpt_dict_response["Category list of big object"]
         big_category_list = list(big_category_dict.keys())
@@ -234,21 +267,9 @@ class InitGPTExecute(BaseTool):
         prompt_payload = gpt.get_payload(
             prompts.step_5_position_prompt_system, user_prompt
         )
-        success = False
-        iter = 0
-        while not success and iter < 5:
-            iter += 1
-            gpt_text_response = gpt(payload=prompt_payload, verbose=True)
-            print(gpt_text_response)
-
-            # gpt_text_response = '{\n    "Roomtype": "Bookstore",\n    "list of given category names": ["sofa", "armchair", "coffee table", "TV stand", "large shelf", "side table", "floor lamp", "remote control", "book", "magazine", "decorative bowl", "photo frame", "vase", "candle", "coaster", "plant"],\n    "Mapping results": {\n        "sofa": "seating.SofaFactory",\n        "armchair": "seating.ArmChairFactory",\n        "coffee table": "tables.CoffeeTableFactory",\n        "TV stand": "shelves.TVStandFactory",\n        "large shelf": "shelves.LargeShelfFactory",\n        "side table": "tables.SideTableFactory",\n        "floor lamp": "lamp.FloorLampFactory",\n        "remote control": null,\n        "book": "table_decorations.BookStackFactory",\n        "magazine": null,\n        "decorative bowl": "tableware.BowlFactory",\n        "photo frame": null,\n        "vase": "table_decorations.VaseFactory",\n        "candle": null,\n        "coaster": null,\n        "plant": "tableware.PlantContainerFactory"\n    }\n}'
-            try:
-                gpt_dict_response = extract_json(
-                    gpt_text_response.replace("'", '"').replace("None", "null")
-                )
-                success = True
-            except:
-                success = False
+        gpt_dict_response, _ = query_gpt_json(
+            gpt, prompt_payload, required_keys=["Placement"], retries=5
+        )
         Placement_big = gpt_dict_response["Placement"]
 
         small_category_list = []
@@ -265,11 +286,8 @@ class InitGPTExecute(BaseTool):
         system_prompt = prompts.step_3_class_name_prompt_system
 
         prompt_payload = gpt.get_payload(system_prompt, user_prompt)
-        gpt_text_response = gpt(payload=prompt_payload, verbose=True)
-        print(gpt_text_response)
-
-        gpt_dict_response = extract_json(
-            gpt_text_response.replace("'", '"').replace("None", "null")
+        gpt_dict_response, gpt_text_response = query_gpt_json(
+            gpt, prompt_payload, required_keys=["Mapping results"], retries=5
         )
         name_mapping = gpt_dict_response["Mapping results"]
 
@@ -300,7 +318,7 @@ class InitGPTExecute(BaseTool):
         results["Placement_small"] = Placement_small
 
         save_dir = os.getenv("save_dir")
-        json_name = f"{save_dir}/pipeline/init_gpt_results_{iter}.json"
+        json_name = f"{save_dir}/pipeline/init_gpt_results_0.json"
         with open(json_name, "w") as f:
             json.dump(results, f, indent=4)
 

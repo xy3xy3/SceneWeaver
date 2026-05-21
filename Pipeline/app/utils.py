@@ -3,6 +3,7 @@ import json
 import math
 import random
 from typing import Any, Dict
+from json_repair import loads as json_repair_loads
 
 # def extract_json(input_string):
 #     # Using regex to identify the JSON structure in the string
@@ -21,8 +22,6 @@ from typing import Any, Dict
 #     else:
 #         print("No valid JSON found.")
 #         return None
-
-
 def extract_json(input_string):
     # Step 1: Extract the JSON string
     start_idx = None
@@ -44,9 +43,9 @@ def extract_json(input_string):
         raise ValueError("No valid JSON found in the input string.")
     # Step 2: Convert the JSON string to a dictionary
     try:
-        json_dict = json.loads(json_string)
+        json_dict = json_repair_loads(json_string)
         return json_dict
-    except json.JSONDecodeError as e:
+    except Exception as e:
         raise ValueError(f"Error decoding JSON: {e}")
 
 

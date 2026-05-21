@@ -5,7 +5,11 @@ from gpt import GPT4
 
 import app.prompt.gpt.add_gpt as prompts1
 import app.prompt.gpt.init_gpt as prompts0
-from app.tool.init_gpt import InitGPTExecute, filter_supported_scene_objects
+from app.tool.init_gpt import (
+    InitGPTExecute,
+    filter_supported_scene_objects,
+    query_gpt_json,
+)
 from app.tool.update_infinigen import update_infinigen
 from app.utils import extract_json, lst2str
 
@@ -91,10 +95,12 @@ class AddGPTExecute(InitGPTExecute):
             step_1_big_object_prompt_user,
             render_path,
         )
-        gpt_text_response = gpt(payload=prompt_payload, verbose=True)
-        print(gpt_text_response)
-
-        gpt_dict_response = extract_json(gpt_text_response)
+        gpt_dict_response, _ = query_gpt_json(
+            gpt,
+            prompt_payload,
+            required_keys=["Number of new furniture", "Placement"],
+            retries=5,
+        )
         results = gpt_dict_response
 
         # #### 2. get object class name in infinigen
@@ -107,11 +113,8 @@ class AddGPTExecute(InitGPTExecute):
         )
         system_prompt = prompts0.step_3_class_name_prompt_system
         prompt_payload = gpt.get_payload(system_prompt, user_prompt)
-        gpt_text_response = gpt(payload=prompt_payload, verbose=True)
-        print(gpt_text_response)
-
-        gpt_dict_response = extract_json(
-            gpt_text_response.replace("'", '"').replace("None", "null")
+        gpt_dict_response, _ = query_gpt_json(
+            gpt, prompt_payload, required_keys=["Mapping results"], retries=5
         )
         name_mapping = gpt_dict_response["Mapping results"]
         (
